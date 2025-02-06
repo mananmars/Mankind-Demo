@@ -23,22 +23,6 @@ if 'text' not in st.session_state:
     st.session_state['sentiment_analysis'] = {}
     st.session_state['critical_analysis']= ""
 
-# Initialize PyAudio
-audio_queue = queue.Queue()
-audio_interface = pyaudio.PyAudio()
-
-stream = audio_interface.open(
-    format=pyaudio.paInt16,
-    channels=1,
-    rate=16000,
-    input=True,
-    frames_per_buffer=3200,
-    stream_callback=lambda in_data, frame_count, time_info, status: (
-        audio_queue.put(in_data),
-        pyaudio.paContinue,
-    )
-)
-
 # Define language options
 language_options = {
     "English (US)": "en-US",
@@ -50,17 +34,77 @@ language_options = {
 selected_language = st.sidebar.selectbox("Select Preferred Language", list(language_options.keys()))
 selected_language_code = language_options[selected_language]
 
-# Google Speech-to-Text Client
-client = speech.SpeechClient()
-config = speech.RecognitionConfig(
-    encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-    sample_rate_hertz=16000,
-    language_code=selected_language_code,
-)
-streaming_config = speech.StreamingRecognitionConfig(
-    config=config,
-    interim_results=True
-)
+
+# Initialize PyAudio
+# audio_queue = queue.Queue()
+# audio_interface = pyaudio.PyAudio()
+
+# stream = audio_interface.open(
+#     format=pyaudio.paInt16,
+#     channels=1,
+#     rate=16000,
+#     input=True,
+#     frames_per_buffer=3200,
+#     stream_callback=lambda in_data, frame_count, time_info, status: (
+#         audio_queue.put(in_data),
+#         pyaudio.paContinue,
+#     )
+# )
+
+# # Google Speech-to-Text Client
+# client = speech.SpeechClient()
+# config = speech.RecognitionConfig(
+#     encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+#     sample_rate_hertz=16000,
+#     language_code=selected_language_code,
+# )
+# streaming_config = speech.StreamingRecognitionConfig(
+#     config=config,
+#     interim_results=True
+# )
+
+# Real-Time Transcription Function
+# def transcribe_stream():
+#     audio_generator = (audio_queue.get() for _ in iter(int, 1))
+#     requests = (
+#         speech.StreamingRecognizeRequest(audio_content=chunk)
+#         for chunk in audio_generator
+#     )
+
+#     responses = client.streaming_recognize(streaming_config, requests)
+
+#     for response in responses:
+#         if not st.session_state['run']:
+#             break
+#         if response.results:
+#             result = response.results[0]
+#             if result.is_final:
+#                 transcription = result.alternatives[0].transcript
+#                 st.session_state['final_transcription'] += transcription + " "
+#                 st.session_state['text'] = transcription
+#                 st.write(st.session_state['text'])
+
+
+def listen():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        while st.session_state["run"]:  # Check session state to allow stopping
+            try:
+                recognizer.adjust_for_ambient_noise(source)
+                audio = recognizer.listen(source)
+                result = recognizer.recognize_google(audio, language=selected_language_code)
+                
+                # Update session state similar to PyAudio logic
+                st.session_state["final_transcription"] += result + " "
+                st.session_state["text"] = result
+                st.write(st.session_state["text"])
+                
+            except sr.UnknownValueError:
+                st.write("Sorry, I could not understand the audio.")
+            except sr.RequestError as e:
+                st.write(f"Could not request results; {e}")
+            except Exception as e:
+                st.write(f"An error occurred: {e}")
 
 
 doctor_sentiment_analysis = """Identify and summarize the doctor's sentiment towards the pharma company, its products, or the industry in general. Capture both explicit and implicit sentiments, and categorize them accordingly. Ensure the output is structured in a tabular format with the columns: Doctor Sentiment, Reason, and Context. With no additional text before or after the table.  Summarize the reason concisely. The response must be in english
@@ -314,33 +358,14 @@ col1, col2 = st.columns(2)
 col1.button('Start', on_click=start_listening)
 col1.button('Stop', on_click=stop_listening)
 
-# Real-Time Transcription Function
-def transcribe_stream():
-    audio_generator = (audio_queue.get() for _ in iter(int, 1))
-    requests = (
-        speech.StreamingRecognizeRequest(audio_content=chunk)
-        for chunk in audio_generator
-    )
 
-    responses = client.streaming_recognize(streaming_config, requests)
-
-    for response in responses:
-        if not st.session_state['run']:
-            break
-        if response.results:
-            result = response.results[0]
-            if result.is_final:
-                transcription = result.alternatives[0].transcript
-                st.session_state['final_transcription'] += transcription + " "
-                st.session_state['text'] = transcription
-                st.write(st.session_state['text'])
 
 
 
 # Start/Stop Transcription
 if st.session_state['run']:
     with st.spinner("Listening... Speak into the microphone."):
-        transcribe_stream()
+        listen()
 
 
 # Prompts
